@@ -1,25 +1,29 @@
 #include "shell.h"
-/**
- * _getenv - gets env of input
- * @env: input
- * Return: env without =
- */
-char *_getenv(char *env)
-{
-	int i = 0, n = 0;
-	char *temp, *res;
 
-	while (environ[i] != NULL)
+
+/**
+ * get_builtin - builtin that pais the command in the arg
+ * @cmd: command
+ * Return: function pointer of the builtin command
+ */
+int (*get_builtin(char *cmd))(data_shell *)
+{
+	builtin_t builtin[] = {
+		{ "env", _env },
+		{ "exit", exit_shell },
+		{ "setenv", _setenv },
+		{ "unsetenv", _unsetenv },
+		{ "cd", cd_shell },
+		{ "help", get_help },
+		{ NULL, NULL }
+	};
+	int i;
+
+	for (i = 0; builtin[i].name; i++)
 	{
-		if (_strcmp(environ[i], env) == 0)
-			temp = environ[i];
-		i++;
+		if (_strcmp(builtin[i].name, cmd) == 0)
+			break;
 	}
-	while (temp[n] != '\0')
-	{
-		if (_strcmp(temp, env) == 0)
-			res = _strstr(temp, "/");
-		n++;
-	}
-	return (res);
+
+	return (builtin[i].f);
 }

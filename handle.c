@@ -1,128 +1,166 @@
-#include "shell.h"
+#include "shell.c"
+
 
 /**
- * _getline - Gets line of user input
- * Return: Pointer to buffer of user input
+ * cd_dot - changes to the parent directory
+ *
+ * @datash: data relevant (environ)
+ *
+ * Return: no return
  */
-char *_getline(void)
+void cd_dot(data_shell *datash)
 {
-	int temp;
-	char *line = NULL;
-	size_t size = 0;
+	char pwd[PATH_MAX];
+	char *dir, *cp_pwd, *cp_strtok_pwd;
 
-	temp = getline(&line, &size, stdin);
-	if (temp == EOF)
+	getcwd(pwd, sizeof(pwd));
+	cp_pwd = _strdup(pwd);
+	set_env("OLDPWD", cp_pwd, datash);
+	dir = datash->args[1];
+	if (_strcmp(".", dir) == 0)
 	{
-		if (isatty(STDIN_FILENO))
-			write(1, "\n", 1);
-		exit(0);
+		set_env("PWD", cp_pwd, datash);
+		free(cp_pwd);
+		return;
 	}
-	return (line);
-}
-/**
- * split_line - Splits line into args
- * @line: Line of user input
- * Return: Array of args of user input
- */
-char **split_line(char *line)
-{
-	size_t buffer_size = TOKENS_BUFFER_SIZE;
-	char **tokens = malloc(sizeof(char *) * buffer_size);
-	char *token;
-	int pos = 0;
+	if (_strcmp("/", cp_pwd) == 0)
+	{
+		free(cp_pwd);
+		return;
+	}
+	cp_strtok_pwd = cp_pwd;
+	rev_string(cp_strtok_pwd);
+	cp_strtok_pwd = _strtok(cp_strtok_pwd, "/");
+	if (cp_strtok_pwd != NULL)
+	{
+		cp_strtok_pwd = _strtok(NULL, "\0");
 
-	if (!tokens)
-	{
-		perror("Could not allocate space for tokens\n");
-		exit(0);
+		if (cp_strtok_pwd != NULL)
+			rev_string(cp_strtok_pwd);
 	}
-	token = strtok(line, TOKEN_DELIMITERS);
-	while (token)
+	if (cp_strtok_pwd != NULL)
 	{
-		tokens[pos] = token;
-		token = strtok(NULL, TOKEN_DELIMITERS);
-		pos++;
-	}
-	tokens[pos] = NULL;
-	return (tokens);
-}
-/**
- * check_for_builtins - Checks for builtins
- * @args: Arguments passed from prompt
- * @line: Buffer with line of input from user
- * @env: Environment
- * Return: 1 if builtins exist, 0 if they don't
- */
-int check_for_builtins(char **args, char *line, char **env)
-{
-	builtins_t list[] = {
-		{"exit", exit_shell},
-		{"env", env_shell},
-		{NULL, NULL}
-	};
-	int i;
-
-	for (i = 0; list[i].arg != NULL; i++)
-	{
-		if (_strcmp(list[i].arg, args[0]) == 0)
-		{
-			list[i].builtin(args, line, env);
-			return (1);
-		}
-	}
-	return (0);
-}
-/**
- * launch_prog - Forks and launches unix cmd
- * @args: Args for cmd
- * Return: 1 on success
- */
-int launch_prog(char **args)
-{
-	pid_t pid, wpid;
-	int status;
-
-	pid = fork();
-	if (pid == 0)
-	{
-		if (execve(args[0], args, NULL) == -1)
-		{
-			perror("Failed to execute command\n");
-			exit(0);
-		}
-	}
-	else if (pid < 0)
-	{
-		perror("Error forking\n");
-		exit(0);
+		chdir(cp_strtok_pwd);
+		set_env("PWD", cp_strtok_pwd, datash);
 	}
 	else
 	{
-		do {
-			wpid = waitpid(pid, &status, WUNTRACED);
-		} while (!WIFEXITED(status) && WIFSIGNALED(status));
+		chdir("/");
+		set_env("PWD", "/", datash);
 	}
-	(void)wpid;
-	return (1);
+	datash->status = 0;
+	free(cp_pwd);
 }
-/**
- * builtins_checker - Checks for builtins
- * @args: Arguments passed from prompt
- * Return: 1 if builtins exist, 0 if they don't
- */
-int builtins_checker(char **args)
-{
-	int i;
-	builtins_t list[] = {
-		{"exit", exit_shell},
-		{"env", env_shell},
-		{NULL, NULL}
-	};
 
-	for (i = 0; list[i].arg != NULL; i++)
+/**
+ * cd_to - changes to a directory given
+ * by the user
+ *
+ * @datash: data relevant (directories)
+ * Return: no return
+ */
+void cd_to(data_shell *datash)
+{
+	char pwd[PATH_MAX];
+	char *dir, *cp_pwd, *cp_dir;
+
+	getcwd(pwd, sizeof(pwd));
+
+	dir = datash->args[1];
+	if (chdir(dir) == -1)
 	{
-		if (_strcmp(list[i].arg, args[0]) == 0)
-			return (1);
+		get_error(datash, 2);
+		return;
 	}
-	return (0);
+
+	cp_pwd = _strdup(pwd);
+	set_env("OLDPWD", cp_pwd, datash);
+
+	cp_dir = _strdup(dir);
+	set_env("PWD", cp_dir, datash);
+
+	free(cp_pwd);
+	free(cp_dir);
+
+	datash->status = 0;
+
+	chdir(dir);
+}
+
+/**
+ * cd_previous - changes to the previous directory
+ *
+ * @datash: data relevant (environ)
+ * Return: no return
+ */
+void cd_previous(data_shell *datash)
+{
+	char pwd[PATH_MAX];
+	char *p_pwd, *p_oldpwd, *cp_pwd, *cp_oldpwd;
+
+	getcwd(pwd, sizeof(pwd));
+	cp_pwd = _strdup(pwd);
+
+	p_oldpwd = _getenv("OLDPWD", datash->_environ);
+
+	if (p_oldpwd == NULL)
+		cp_oldpwd = cp_pwd;
+	else
+		cp_oldpwd = _strdup(p_oldpwd);
+
+	set_env("OLDPWD", cp_pwd, datash);
+
+	if (chdir(cp_oldpwd) == -1)
+		set_env("PWD", cp_pwd, datash);
+	else
+		set_env("PWD", cp_oldpwd, datash);
+
+	p_pwd = _getenv("PWD", datash->_environ);
+
+	write(STDOUT_FILENO, p_pwd, _strlen(p_pwd));
+	write(STDOUT_FILENO, "\n", 1);
+
+	free(cp_pwd);
+	if (p_oldpwd)
+		free(cp_oldpwd);
+
+	datash->status = 0;
+
+	chdir(p_pwd);
+}
+
+/**
+ * cd_to_home - changes to home directory
+ *
+ * @datash: data relevant (environ)
+ * Return: no return
+ */
+void cd_to_home(data_shell *datash)
+{
+	char *p_pwd, *home;
+	char pwd[PATH_MAX];
+
+	getcwd(pwd, sizeof(pwd));
+	p_pwd = _strdup(pwd);
+
+	home = _getenv("HOME", datash->_environ);
+
+	if (home == NULL)
+	{
+		set_env("OLDPWD", p_pwd, datash);
+		free(p_pwd);
+		return;
+	}
+
+	if (chdir(home) == -1)
+	{
+		get_error(datash, 2);
+		free(p_pwd);
+		return;
+	}
+
+	set_env("OLDPWD", p_pwd, datash);
+	set_env("PWD", home, datash);
+	free(p_pwd);
+	datash->status = 0;
 }
